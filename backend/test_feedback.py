@@ -87,6 +87,39 @@ def test_valid_feedback_submission():
     assert "IPCC multi-criteria" in data["most_useful_feature"]
     assert "created_at" in data
     print(f"✓ Feedback created successfully: ID {data['id']}")
+    return data["id"]
+
+
+def test_get_feedback_by_id():
+    print("\n--- 2b. Testing GET /api/feedback/{feedback_id} Endpoint ---")
+    payload = {
+        "name": "Direct ID Test",
+        "role": "Evaluator",
+        "overall_rating": 5,
+        "ease_of_use": 5,
+        "data_visualization": 5,
+        "heat_risk_analysis": 5,
+        "intervention_recommendations": 5,
+        "most_useful_feature": "Single record lookup by UUID",
+        "suggestions": "None",
+        "additional_comments": "Testing direct ID retrieval"
+    }
+    create_resp = client.post("/api/feedback", json=payload)
+    assert create_resp.status_code == 201
+    created_id = create_resp.json()["id"]
+
+    # Fetch by ID
+    get_resp = client.get(f"/api/feedback/{created_id}")
+    assert get_resp.status_code == 200, f"Expected 200, got {get_resp.status_code}: {get_resp.text}"
+    record = get_resp.json()
+    assert record["id"] == created_id
+    assert record["name"] == "Direct ID Test"
+    assert record["role"] == "Evaluator"
+
+    # Fetch non-existent ID
+    bad_resp = client.get("/api/feedback/non-existent-uuid-12345")
+    assert bad_resp.status_code == 404
+    print("✓ GET /api/feedback/{id} verified for both valid and 404 cases.")
 
 
 def test_feedback_retrieval_and_persistence():
@@ -273,10 +306,11 @@ def test_api_summary_endpoint():
 if __name__ == "__main__":
     test_empty_database_summary()
     test_valid_feedback_submission()
+    test_get_feedback_by_id()
     test_feedback_retrieval_and_persistence()
     test_missing_required_fields()
     test_invalid_rating_values()
     test_feedback_summary_statistics_calculation()
     test_api_summary_endpoint()
-    print("\n🎉 ALL FEEDBACK SESSION VERIFICATION TESTS PASSED (7/7)! 🎉\n")
+    print("\n🎉 ALL FEEDBACK SESSION VERIFICATION TESTS PASSED (8/8)! 🎉\n")
 

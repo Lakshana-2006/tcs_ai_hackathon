@@ -1,4 +1,18 @@
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+// Base URL resolution:
+// If VITE_API_URL is configured, use it.
+// If running on Vite dev server (port 5173) or FastAPI server (port 8000), use relative '' so
+// requests seamlessly go through Vite's proxy or same origin, preventing CORS/host mismatches on desktop, tablet, and mobile.
+const resolveBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.port === '5173' || window.location.port === '8000') {
+      return '';
+    }
+  }
+  return 'http://127.0.0.1:8000';
+};
+
+const BASE_URL = resolveBaseUrl();
 
 export async function searchCities(query) {
   if (!query || query.trim().length === 0) return [];
@@ -276,28 +290,58 @@ export async function fetchTemporalComparison(city, lat, lon) {
 }
 
 export async function submitFeedback(feedbackData) {
-  const res = await fetch(`${BASE_URL}/api/feedback`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(feedbackData)
-  });
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}/api/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(feedbackData)
+    });
+  } catch (netErr) {
+    throw new Error(`Network connection error: Unable to reach backend server at ${BASE_URL || window.location.origin}. Please check that the backend is running.`);
+  }
+
   if (!res.ok) {
     const errorJson = await res.json().catch(() => ({}));
-    const detailMsg = errorJson.detail || `Feedback submission failed: ${res.statusText}`;
-    throw new Error(detailMsg);
+    let detailMsg = errorJson.detail;
+    if (Array.isArray(detailMsg)) {
+      // Cleanly format FastAPI/Pydantic validation errors
+      detailMsg = detailMsg
+        .map(d => `${d.loc ? d.loc.filter(x => x !== 'body').join('.') + ': ' : ''}${d.msg}`)
+        .join('; ');
+    } else if (typeof detailMsg === 'object' && detailMsg !== null) {
+      detailMsg = JSON.stringify(detailMsg);
+    }
+    throw new Error(detailMsg || `Feedback submission failed (HTTP ${res.status}): ${res.statusText}`);
   }
   return res.json();
 }
 
 export async function fetchFeedbackSummary() {
-  const res = await fetch(`${BASE_URL}/api/feedback/summary`);
-  if (!res.ok) throw new Error(`Feedback summary fetch failed: ${res.statusText}`);
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}/api/feedback/summary`);
+  } catch (netErr) {
+    throw new Error(`Failed to connect to backend summary endpoint: ${netErr.message}`);
+  }
+  if (!res.ok) throw new Error(`Feedback summary fetch failed (HTTP ${res.status}): ${res.statusText}`);
   return res.json();
 }
 
-export async function fetchFeedbackList(limit = 20, offset = 0) {
-  const params = new URLSearchParams({ limit, offset });
-  const res = await fetch(`${BASE_URL}/api/feedback?${params.toString()}`);
-  if (!res.ok) throw new Error(`Feedback list fetch failed: ${res.statusText}`);
+export async function fetchFeedbackList(limit = 50, offset = 0) {
+  let res;
+  try {
+    const params = new URLSearchParams({ limit, offset });
+    res = await fetch(`${BASE_URL}/api/feedback?${params.toString()}`);
+  } catch (netErr) {
+    throw new Error(`Failed to connect to feedback records endpoint: ${netErr.message}`);
+  }
+  if (!res.ok) throw new Error(`Feedback list fetch failed (HTTP ${res.status}): ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchSingleFeedback(feedbackId) {
+  const res = await fetch(`${BASE_URL}/api/feedback/${encodeURIComponent(feedbackId)}`);
+  if (!res.ok) throw new Error(`Failed to retrieve feedback ${feedbackId}: ${res.statusText}`);
   return res.json();
 }

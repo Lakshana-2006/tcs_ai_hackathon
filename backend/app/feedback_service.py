@@ -4,6 +4,7 @@ HEATSHIELD AI — Global Urban Climate Resilience Digital Twin
 
 Manages:
 - Persistent SQLite storage for feedback submitted by hackathon judges, evaluators, and users
+- WAL mode for concurrent multi-client read/write safety
 - Field validation and duplicate submission safeguards
 - Aggregate statistics calculation (overall rating, ease of use, data viz, heat risk, interventions)
 - Role distribution and rating histogram calculations
@@ -28,11 +29,16 @@ ALLOWED_ROLES = ["Judge", "Evaluator", "Student", "Faculty", "Other"]
 
 
 def _get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
-    """Creates a thread-safe connection to the SQLite database."""
+    """Creates a thread-safe connection to the SQLite database with WAL mode."""
     target_path = db_path or DEFAULT_DB_PATH
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
-    conn = sqlite3.connect(target_path, timeout=10.0, check_same_thread=False)
+    conn = sqlite3.connect(target_path, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+    except Exception as e:
+        logger.debug(f"PRAGMA setup notice: {e}")
     return conn
 
 
@@ -61,6 +67,7 @@ def init_feedback_db(db_path: Optional[str] = None) -> None:
                 CREATE INDEX IF NOT EXISTS idx_feedback_created_at
                 ON feedback_submissions(created_at DESC)
             """)
+            conn.commit()
     finally:
         conn.close()
 
@@ -133,7 +140,8 @@ def save_feedback(feedback_data: FeedbackCreate, db_path: Optional[str] = None) 
                 clean_comments,
                 created_at
             ))
-        
+            conn.commit()
+
         logger.info(f"Feedback {feedback_id} saved successfully from role: {canonical_role}")
         return {
             "id": feedback_id,
@@ -167,11 +175,29 @@ def get_all_feedback(
                    data_visualization, heat_risk_analysis, intervention_recommendations,
                    most_useful_feature, suggestions, additional_comments, created_at
             FROM feedback_submissions
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, rowid DESC
             LIMIT ? OFFSET ?
         """, (limit, offset))
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def get_feedback_by_id(feedback_id: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Retrieves a single feedback record by its UUID."""
+    conn = _get_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, role, overall_rating, ease_of_use,
+                   data_visualization, heat_risk_analysis, intervention_recommendations,
+                   most_useful_feature, suggestions, additional_comments, created_at
+            FROM feedback_submissions
+            WHERE id = ?
+        """, (feedback_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
     finally:
         conn.close()
 
@@ -274,4 +300,3 @@ def get_feedback_summary(db_path: Optional[str] = None) -> Dict[str, Any]:
         }
     finally:
         conn.close()
-

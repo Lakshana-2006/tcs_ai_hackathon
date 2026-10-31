@@ -26,6 +26,7 @@ from app.models import (
 from app.feedback_service import (
     save_feedback,
     get_all_feedback,
+    get_feedback_by_id,
     get_feedback_summary,
 )
 from app.simulation import simulate_zone_interventions, calculate_composite_risk
@@ -982,4 +983,16 @@ def get_feedback_statistics():
     rating distributions, and role breakdowns.
     """
     return get_feedback_summary()
+
+
+@app.get("/api/feedback/{feedback_id}", response_model=FeedbackRecord)
+def get_single_feedback(feedback_id: str):
+    """
+    Retrieves an individual feedback record by ID.
+    """
+    record = get_feedback_by_id(feedback_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Feedback record '{feedback_id}' not found.")
+    return record
+
 

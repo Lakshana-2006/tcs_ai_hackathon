@@ -12,11 +12,15 @@ import {
   Loader2, 
   Clock, 
   Award, 
-  ShieldCheck,
-  TrendingUp,
-  MessageCircle,
-  HelpCircle,
-  Users
+  ShieldCheck, 
+  TrendingUp, 
+  MessageCircle, 
+  HelpCircle, 
+  Users,
+  Search,
+  Check,
+  Filter,
+  ArrowRight
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -62,7 +66,9 @@ function StarRating({ value, onChange, label, desc, error }) {
   const [hoverVal, setHoverVal] = useState(0);
 
   return (
-    <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800 space-y-1.5 transition hover:border-slate-700">
+    <div className={`p-3 rounded-xl border transition ${
+      error ? 'border-rose-500/80 bg-rose-950/20' : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+    } space-y-1.5`}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
         <div>
           <span className="text-xs font-semibold text-slate-200">{label}</span>
@@ -129,22 +135,29 @@ export default function FeedbackSession({ activeCity }) {
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [recentList, setRecentList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
-  const [activeView, setActiveView] = useState('form'); // 'form', 'summary', 'reviews'
+  const [activeView, setActiveView] = useState('form'); // 'form', 'records', 'summary'
+  const [highlightedId, setHighlightedId] = useState(null);
 
-  // Load Summary
+  // Search & Filter in Records View
+  const [recordSearch, setRecordSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('All');
+
+  // Load Summary & List
   const refreshData = async () => {
     try {
       setLoadingSummary(true);
+      setLoadingList(true);
       const [sumData, listData] = await Promise.all([
         fetchFeedbackSummary(),
-        fetchFeedbackList(15, 0)
+        fetchFeedbackList(50, 0)
       ]);
       setSummary(sumData);
       setRecentList(listData);
     } catch (err) {
-      console.warn('Could not load feedback summary:', err.message);
+      console.warn('Could not load feedback data:', err.message);
     } finally {
       setLoadingSummary(false);
+      setLoadingList(false);
     }
   };
 
@@ -156,7 +169,7 @@ export default function FeedbackSession({ activeCity }) {
   const validate = () => {
     const errs = {};
     if (!formData.role) errs.role = 'Please select your evaluation role.';
-    
+
     if (!formData.overall_rating) errs.overall_rating = 'Please rate the overall system.';
     if (!formData.ease_of_use) errs.ease_of_use = 'Please rate ease of use & UX.';
     if (!formData.data_visualization) errs.data_visualization = 'Please rate data visualization.';
@@ -164,10 +177,10 @@ export default function FeedbackSession({ activeCity }) {
     if (!formData.intervention_recommendations) errs.intervention_recommendations = 'Please rate interventions.';
 
     if (!formData.most_useful_feature || formData.most_useful_feature.trim().length < 2) {
-      errs.most_useful_feature = 'Please specify the most useful feature (min 2 characters).';
+      errs.most_useful_feature = 'Please specify the most useful feature (minimum 2 characters).';
     }
     if (!formData.suggestions || formData.suggestions.trim().length < 3) {
-      errs.suggestions = 'Please provide constructive suggestions for improvement (min 3 characters).';
+      errs.suggestions = 'Please provide constructive suggestions for improvement (minimum 3 characters).';
     }
 
     setErrors(errs);
@@ -180,6 +193,7 @@ export default function FeedbackSession({ activeCity }) {
     setSuccessResult(null);
 
     if (!validate()) {
+      setSubmitError('Please complete all 5 rating dimensions and required text fields before submitting.');
       return;
     }
 
@@ -200,10 +214,20 @@ export default function FeedbackSession({ activeCity }) {
 
       const result = await submitFeedback(payload);
       setSuccessResult(result);
+      setHighlightedId(result.id);
+
+      // Prepend to list immediately so it appears instantly in the records feed
+      setRecentList((prev) => [result, ...prev.filter((r) => r.id !== result.id)]);
+
+      // Reset form
       setFormData(initialFormState);
       setErrors({});
-      // Refresh summary
+
+      // Refresh summary from database
       await refreshData();
+
+      // Automatically switch to Feedback Records view so the user immediately sees their record in the list!
+      setActiveView('records');
     } catch (err) {
       setSubmitError(err.message || 'Failed to submit feedback. Please check connection and try again.');
     } finally {
@@ -218,7 +242,20 @@ export default function FeedbackSession({ activeCity }) {
     setSuccessResult(null);
   };
 
-  // Star Distribution Bar Data
+  // Filtered Records
+  const filteredRecords = recentList.filter((rec) => {
+    const matchesRole = roleFilter === 'All' || rec.role === roleFilter;
+    if (!matchesRole) return false;
+
+    if (!recordSearch.trim()) return true;
+    const query = recordSearch.toLowerCase();
+    const nameMatch = (rec.name || '').toLowerCase().includes(query);
+    const featureMatch = (rec.most_useful_feature || '').toLowerCase().includes(query);
+    const suggestionMatch = (rec.suggestions || '').toLowerCase().includes(query);
+    return nameMatch || featureMatch || suggestionMatch;
+  });
+
+  // Recharts Data
   const ratingDistData = summary?.rating_distribution
     ? Object.keys(summary.rating_distribution).map((stars) => ({
         stars: `${stars} ★`,
@@ -238,13 +275,13 @@ export default function FeedbackSession({ activeCity }) {
           </div>
           <div>
             <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <span>HEATSHIELD AI — Hackathon Evaluator & Judge Feedback Session</span>
+              <span>HEATSHIELD AI — Evaluator & Judge Feedback Session</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                Persistent Storage
+                Persistent SQLite Database
               </span>
             </h2>
             <p className="text-xs text-slate-400">
-              Submit structured ratings, feature evaluations, and suggestions for urban resilience decision-support.
+              Submit structured ratings, evaluate digital twin features, and review peer evaluations stored persistently.
             </p>
           </div>
         </div>
@@ -264,6 +301,18 @@ export default function FeedbackSession({ activeCity }) {
           </button>
 
           <button
+            onClick={() => setActiveView('records')}
+            className={`text-xs px-3 py-1.5 rounded-md font-semibold transition flex items-center gap-1.5 ${
+              activeView === 'records'
+                ? 'bg-purple-500 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Feedback Records ({recentList.length})</span>
+          </button>
+
+          <button
             onClick={() => setActiveView('summary')}
             className={`text-xs px-3 py-1.5 rounded-md font-semibold transition flex items-center gap-1.5 ${
               activeView === 'summary'
@@ -272,54 +321,70 @@ export default function FeedbackSession({ activeCity }) {
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
-            <span>Aggregate Analytics ({summary?.total_submissions || 0})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('reviews')}
-            className={`text-xs px-3 py-1.5 rounded-md font-semibold transition flex items-center gap-1.5 ${
-              activeView === 'reviews'
-                ? 'bg-purple-500 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Recent Feed</span>
+            <span>Analytics & Summary ({summary?.total_submissions || 0})</span>
           </button>
         </div>
       </div>
+
+      {/* Global Success Banner (Persists across view switches if feedback was just submitted) */}
+      {successResult && (
+        <div className="bg-emerald-950/80 border border-emerald-500/50 rounded-xl p-4 text-emerald-300 space-y-2 shadow-lg shadow-emerald-950/40 animate-in fade-in duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-xs">
+                <p className="font-bold text-sm text-white">
+                  🎉 Feedback Successfully Submitted and Saved to Persistent Database!
+                </p>
+                <p className="text-slate-300">
+                  Submission ID: <code className="text-emerald-400 font-mono text-[11px] bg-slate-900 px-1.5 py-0.5 rounded">{successResult.id}</code> • 
+                  Reviewer: <strong className="text-white">{successResult.name || 'Anonymous'}</strong> ({successResult.role}) • 
+                  Overall Rating: <span className="text-amber-400 font-bold">{successResult.overall_rating}.0 ★</span> • 
+                  Recorded: <span className="text-slate-400">{successResult.created_at}</span>
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Your evaluation has been written to the backend database and incorporated into aggregate analytics.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {activeView !== 'records' && (
+                <button
+                  onClick={() => setActiveView('records')}
+                  className="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold transition flex items-center gap-1"
+                >
+                  <span>View in Records List</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {activeView !== 'form' && (
+                <button
+                  onClick={() => { setActiveView('form'); setSuccessResult(null); }}
+                  className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-medium transition"
+                >
+                  Submit Another Review
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* VIEW 1: FEEDBACK SUBMISSION FORM */}
       {activeView === 'form' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Main Form Column */}
           <div className="lg:col-span-8 glass-panel rounded-xl p-4 sm:p-6 space-y-5">
-            {/* Success Message Banner */}
-            {successResult && (
-              <div className="bg-emerald-950/70 border border-emerald-500/40 rounded-xl p-4 text-emerald-300 space-y-1.5 flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-xs">
-                  <p className="font-bold text-sm text-white">Thank you! Your feedback has been recorded persistently.</p>
-                  <p className="text-slate-300">
-                    Submission ID: <code className="text-emerald-400 font-mono text-[11px]">{successResult.id}</code> • Recorded at {successResult.created_at}.
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    Your evaluation scores have been incorporated into the aggregate analytics.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Error Message Banner */}
-            {submitError && (
-              <div className="bg-rose-950/60 border border-rose-500/40 rounded-xl p-3.5 text-rose-300 flex items-center gap-2.5 text-xs">
-                <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-                <div>
-                  <span className="font-bold">Submission Failed: </span>
-                  <span>{submitError}</span>
-                </div>
-              </div>
-            )}
+            <div className="border-b border-slate-800 pb-2 flex items-center justify-between">
+              <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <MessageSquarePlus className="w-4 h-4 text-amber-400" />
+                <span>Evaluation Entry Form</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Active City: {activeCity?.name || 'Chennai'}
+              </span>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Identity & Role Row */}
@@ -362,7 +427,7 @@ export default function FeedbackSession({ activeCity }) {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                     <Star className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Evaluation Dimensions (1 to 5 Stars)</span>
+                    <span>Evaluation Dimensions (1 to 5 Stars) <strong className="text-rose-400">*</strong></span>
                   </span>
                   <span className="text-[10px] text-slate-400">All 5 dimensions required</span>
                 </div>
@@ -463,6 +528,17 @@ export default function FeedbackSession({ activeCity }) {
                 </div>
               </div>
 
+              {/* Validation / Network Error Banner displayed directly above submit button */}
+              {submitError && (
+                <div className="bg-rose-950/70 border border-rose-500/50 rounded-xl p-3 text-rose-300 flex items-start gap-2.5 text-xs animate-in fade-in duration-200">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Submission Blocked: </span>
+                    <span>{submitError}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                 <button
@@ -478,17 +554,17 @@ export default function FeedbackSession({ activeCity }) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="text-xs font-bold px-6 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 transition flex items-center gap-2 disabled:opacity-50"
+                  className="text-xs font-bold px-6 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 transition flex items-center gap-2 disabled:opacity-50 cursor-pointer active:scale-95"
                 >
                   {submitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                      <span>Saving Feedback...</span>
+                      <span>Saving to Database...</span>
                     </>
                   ) : (
                     <>
                       <Send className="w-3.5 h-3.5" />
-                      <span>Submit Evaluation</span>
+                      <span>Submit Feedback</span>
                     </>
                   )}
                 </button>
@@ -496,15 +572,16 @@ export default function FeedbackSession({ activeCity }) {
             </form>
           </div>
 
-          {/* Quick Summary Side Card */}
+          {/* Quick Summary & Recent Preview Side Column */}
           <div className="lg:col-span-4 space-y-4">
-            <div className="glass-panel rounded-xl p-4 sm:p-5 space-y-4 border border-slate-800">
+            {/* Live Aggregate Score Card */}
+            <div className="glass-panel rounded-xl p-4 sm:p-5 space-y-3.5 border border-slate-800">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Award className="w-4 h-4 text-amber-400" />
                   <span>Live Evaluation Metrics</span>
                 </span>
-                <span className="text-[10px] font-mono text-cyan-400">
+                <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/60">
                   {summary?.total_submissions || 0} Submissions
                 </span>
               </div>
@@ -531,51 +608,251 @@ export default function FeedbackSession({ activeCity }) {
               </div>
 
               {/* Dimension Averages List */}
-              <div className="space-y-2 text-xs">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dimension Averages</span>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                    <span className="text-slate-300">Ease of Use & UX</span>
-                    <span className="font-mono font-bold text-cyan-300">
-                      {summary?.avg_ease_of_use ? `${summary.avg_ease_of_use.toFixed(1)} ★` : '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                    <span className="text-slate-300">Data Visualization</span>
-                    <span className="font-mono font-bold text-purple-300">
-                      {summary?.avg_data_visualization ? `${summary.avg_data_visualization.toFixed(1)} ★` : '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                    <span className="text-slate-300">Heat Risk Modeling</span>
-                    <span className="font-mono font-bold text-rose-300">
-                      {summary?.avg_heat_risk_analysis ? `${summary.avg_heat_risk_analysis.toFixed(1)} ★` : '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                    <span className="text-slate-300">Intervention Recommendations</span>
-                    <span className="font-mono font-bold text-emerald-300">
-                      {summary?.avg_intervention_recommendations ? `${summary.avg_intervention_recommendations.toFixed(1)} ★` : '—'}
-                    </span>
-                  </div>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                  <span className="text-slate-300">Ease of Use & UX</span>
+                  <span className="font-mono font-bold text-cyan-300">
+                    {summary?.avg_ease_of_use ? `${summary.avg_ease_of_use.toFixed(1)} ★` : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                  <span className="text-slate-300">Data Visualization</span>
+                  <span className="font-mono font-bold text-purple-300">
+                    {summary?.avg_data_visualization ? `${summary.avg_data_visualization.toFixed(1)} ★` : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                  <span className="text-slate-300">Heat Risk Modeling</span>
+                  <span className="font-mono font-bold text-rose-300">
+                    {summary?.avg_heat_risk_analysis ? `${summary.avg_heat_risk_analysis.toFixed(1)} ★` : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                  <span className="text-slate-300">Intervention Recommendations</span>
+                  <span className="font-mono font-bold text-emerald-300">
+                    {summary?.avg_intervention_recommendations ? `${summary.avg_intervention_recommendations.toFixed(1)} ★` : '—'}
+                  </span>
                 </div>
               </div>
+            </div>
 
-              {/* Evaluator Guidelines Note */}
-              <div className="text-[11px] text-slate-400 bg-slate-950/70 p-3 rounded-lg border border-slate-800/80 space-y-1">
-                <span className="font-bold text-slate-300 flex items-center gap-1">
-                  <HelpCircle className="w-3 h-3 text-cyan-400" /> Hackathon Evaluation Focus
+            {/* Live Submissions Preview Card on Form View */}
+            <div className="glass-panel rounded-xl p-4 space-y-3 border border-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Recent Submissions Preview</span>
                 </span>
-                <p className="leading-relaxed">
-                  Your feedback validates the digital twin's scientific integrity, real-time Open-Meteo weather telemetry, Landsat 8/9 thermal calibration, and IPCC decision-support usability.
-                </p>
+                <button
+                  onClick={() => setActiveView('records')}
+                  className="text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold"
+                >
+                  View All ({recentList.length}) →
+                </button>
               </div>
+
+              {recentList.length === 0 ? (
+                <p className="text-[11px] text-slate-500 italic py-2">
+                  No feedback records in SQLite yet. Submissions will appear here instantly.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {recentList.slice(0, 3).map((item) => (
+                    <div key={item.id} className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white truncate max-w-[140px]">{item.name || 'Anonymous'}</span>
+                        <div className="flex items-center gap-1 text-amber-400 font-mono text-[11px]">
+                          <Star className="w-3 h-3 fill-amber-400" />
+                          <span>{item.overall_rating}.0</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span className="bg-slate-900 px-1.5 py-0.5 rounded text-cyan-300">{item.role}</span>
+                        <span className="text-slate-500">{item.created_at.split(' ')[0]}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 truncate italic">
+                        "{item.most_useful_feature}"
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* VIEW 2: AGGREGATE SUMMARY & RECHARTS ANALYTICS */}
+      {/* VIEW 2: ALL FEEDBACK RECORDS (THE REVIEWS FEED) */}
+      {activeView === 'records' && (
+        <div className="glass-panel rounded-xl p-4 sm:p-6 space-y-4 border border-slate-800">
+          {/* Header Controls */}
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Users className="w-4 h-4 text-purple-400" />
+                <span>Verified Feedback & Evaluation Records</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/30">
+                  {filteredRecords.length} Displayed
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Persistent submissions stored in SQLite database (<code className="text-cyan-400 text-[10px]">backend/data/feedback.db</code>).
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              {/* Search Box */}
+              <div className="relative flex-1 md:w-48">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Filter feedback..."
+                  value={recordSearch}
+                  onChange={(e) => setRecordSearch(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-purple-500 rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none"
+                />
+              </div>
+
+              <button
+                onClick={() => { setActiveView('form'); setSuccessResult(null); }}
+                className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold transition shrink-0 flex items-center gap-1.5"
+              >
+                <MessageSquarePlus className="w-3.5 h-3.5" />
+                <span>+ Submit Feedback</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Role Filter Pills */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mr-1 flex items-center gap-1">
+              <Filter className="w-3 h-3" /> Filter:
+            </span>
+            {['All', ...ROLES.map((r) => r.id)].map((roleOption) => (
+              <button
+                key={roleOption}
+                onClick={() => setRoleFilter(roleOption)}
+                className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium transition ${
+                  roleFilter === roleOption
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
+                }`}
+              >
+                {roleOption}
+              </button>
+            ))}
+          </div>
+
+          {/* List of Feedback Cards */}
+          {loadingList ? (
+            <div className="text-center py-12 text-slate-400 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+              <p className="text-xs">Loading feedback records from SQLite...</p>
+            </div>
+          ) : filteredRecords.length === 0 ? (
+            <div className="text-center py-12 space-y-2.5 border border-dashed border-slate-800 rounded-xl bg-slate-950/40">
+              <MessageSquarePlus className="w-8 h-8 text-slate-600 mx-auto" />
+              <p className="text-xs font-semibold text-slate-300">No matching feedback records found</p>
+              <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                {recentList.length === 0 
+                  ? 'No evaluations have been submitted yet. Submit feedback to see it recorded persistently.' 
+                  : 'No records match your active search or role filter.'}
+              </p>
+              <button
+                onClick={() => setActiveView('form')}
+                className="mt-1 text-xs px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg transition"
+              >
+                Open Evaluation Form
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredRecords.map((item) => {
+                const isJustSubmitted = item.id === highlightedId;
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-4 rounded-xl border transition-all ${
+                      isJustSubmitted
+                        ? 'bg-slate-900/90 border-emerald-500 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-500/50'
+                        : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700'
+                    } space-y-2.5 text-xs`}
+                  >
+                    {/* Top Row: Reviewer, Role & Timestamp */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-900 pb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-white text-sm">{item.name || 'Anonymous Evaluator'}</span>
+                        <span className="text-[9px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
+                          {item.role}
+                        </span>
+                        {isJustSubmitted && (
+                          <span className="text-[9px] uppercase font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
+                            Just Submitted
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 text-[11px] font-mono">
+                        <div className="flex items-center gap-1 text-amber-400">
+                          <Star className="w-4 h-4 fill-amber-400" />
+                          <span className="font-bold text-sm">{item.overall_rating}.0 / 5.0</span>
+                        </div>
+                        <span className="text-slate-500 text-[10px] flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> {item.created_at}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Dimensions Score Strip */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] font-mono text-slate-400">
+                      <div className="bg-slate-900/70 p-1.5 rounded-lg border border-slate-800/80 flex justify-between">
+                        <span>Ease of Use:</span> <strong className="text-cyan-300">{item.ease_of_use}★</strong>
+                      </div>
+                      <div className="bg-slate-900/70 p-1.5 rounded-lg border border-slate-800/80 flex justify-between">
+                        <span>Data Viz:</span> <strong className="text-purple-300">{item.data_visualization}★</strong>
+                      </div>
+                      <div className="bg-slate-900/70 p-1.5 rounded-lg border border-slate-800/80 flex justify-between">
+                        <span>Risk Model:</span> <strong className="text-rose-300">{item.heat_risk_analysis}★</strong>
+                      </div>
+                      <div className="bg-slate-900/70 p-1.5 rounded-lg border border-slate-800/80 flex justify-between">
+                        <span>Interventions:</span> <strong className="text-emerald-300">{item.intervention_recommendations}★</strong>
+                      </div>
+                    </div>
+
+                    {/* Qualitative Responses */}
+                    <div className="space-y-1.5 pt-0.5">
+                      <div className="text-[11px] text-slate-200">
+                        <span className="text-slate-400 font-semibold">Most Useful Feature: </span>
+                        <span className="text-cyan-300 italic font-medium">"{item.most_useful_feature}"</span>
+                      </div>
+
+                      <div className="text-[11px] text-slate-300">
+                        <span className="text-slate-400 font-semibold">Suggestions for Improvement: </span>
+                        <span>{item.suggestions}</span>
+                      </div>
+
+                      {item.additional_comments && (
+                        <div className="text-[11px] text-slate-400 bg-slate-900/40 p-2 rounded-lg border border-slate-850">
+                          <span className="text-slate-500 font-semibold">Additional Remarks: </span>
+                          <span>{item.additional_comments}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer with UUID verification tag */}
+                    <div className="pt-1 text-[9px] font-mono text-slate-600 flex items-center justify-between border-t border-slate-900">
+                      <span>Verified Record ID: {item.id}</span>
+                      <span>Persistent SQLite Storage</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VIEW 3: AGGREGATE SUMMARY & RECHARTS ANALYTICS */}
       {activeView === 'summary' && (
         <div className="space-y-4">
           {loadingSummary ? (
@@ -599,7 +876,7 @@ export default function FeedbackSession({ activeCity }) {
             </div>
           ) : (
             <>
-              {/* 5 KPI Metric Cards */}
+              {/* 6 KPI Metric Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 <div className="glass-panel rounded-xl p-3 border border-slate-800 text-center">
                   <div className="text-[10px] text-slate-400 font-semibold uppercase">Total Reviews</div>
@@ -713,80 +990,6 @@ export default function FeedbackSession({ activeCity }) {
           )}
         </div>
       )}
-
-      {/* VIEW 3: RECENT FEED */}
-      {activeView === 'reviews' && (
-        <div className="glass-panel rounded-xl p-4 sm:p-6 space-y-4 border border-slate-800">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <span className="text-xs font-bold text-white flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-purple-400" />
-              <span>Recent Feedback Submissions (Reverse Chronological)</span>
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              Showing {recentList.length} of {summary?.total_submissions || recentList.length}
-            </span>
-          </div>
-
-          {recentList.length === 0 ? (
-            <div className="text-center py-8 text-slate-500 text-xs">
-              No feedback records found. Submit feedback to see it listed here.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentList.map((item) => (
-                <div key={item.id} className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800/80 space-y-2 text-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-900 pb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white">{item.name || 'Anonymous Evaluator'}</span>
-                      <span className="text-[9px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
-                        {item.role}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-[11px] font-mono">
-                      <div className="flex items-center gap-1 text-amber-400">
-                        <Star className="w-3.5 h-3.5 fill-amber-400" />
-                        <span className="font-bold">{item.overall_rating}.0 / 5.0</span>
-                      </div>
-                      <span className="text-slate-500 text-[10px] flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> {item.created_at}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Dimensions Strip */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[10px] font-mono text-slate-400">
-                    <div className="bg-slate-900/60 p-1 rounded px-2">Ease: <strong className="text-cyan-300">{item.ease_of_use}★</strong></div>
-                    <div className="bg-slate-900/60 p-1 rounded px-2">Data Viz: <strong className="text-purple-300">{item.data_visualization}★</strong></div>
-                    <div className="bg-slate-900/60 p-1 rounded px-2">Risk Model: <strong className="text-rose-300">{item.heat_risk_analysis}★</strong></div>
-                    <div className="bg-slate-900/60 p-1 rounded px-2">Interventions: <strong className="text-emerald-300">{item.intervention_recommendations}★</strong></div>
-                  </div>
-
-                  {/* Most useful feature */}
-                  <div className="text-[11px] text-slate-300">
-                    <span className="text-slate-500 font-semibold">Most Useful: </span>
-                    <span className="italic text-cyan-300">"{item.most_useful_feature}"</span>
-                  </div>
-
-                  {/* Suggestions */}
-                  <div className="text-[11px] text-slate-300">
-                    <span className="text-slate-500 font-semibold">Suggestions: </span>
-                    <span>{item.suggestions}</span>
-                  </div>
-
-                  {/* Comments */}
-                  {item.additional_comments && (
-                    <div className="text-[10px] text-slate-400 bg-slate-900/40 p-2 rounded border border-slate-900">
-                      <span className="text-slate-500 font-semibold">Remarks: </span>
-                      <span>{item.additional_comments}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
-
