@@ -211,6 +211,25 @@ export default function ZoneDetails({ zone, city, simulationResult, satelliteSta
                   * Note: Sentinel-2 provides multispectral surface reflectance; thermal LST is derived from Landsat 8/9 ST_B10 and MODIS.
                 </div>
               </div>
+
+              {/* MODIS 1km Regional Temperature Baseline */}
+              {sat.modis_regional && (
+                <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span className="font-semibold text-purple-300">MODIS Terra Regional Baseline LST</span>
+                    <span className="text-[10px] font-mono text-slate-400">Resolution: 1000m (1km) • MOD11A1</span>
+                  </div>
+                  <div className="flex items-center justify-between font-mono pt-0.5">
+                    <span className="text-xs text-slate-400">Regional Mean LST:</span>
+                    <span className="text-sm font-bold text-purple-300">
+                      {sat.modis_regional.mean_lst_c !== null ? `${sat.modis_regional.mean_lst_c}°C` : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="text-[9px] text-slate-500 italic">
+                    * Coarse 1km regional baseline for macroscopic thermal validation.
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-slate-950/70 p-3 rounded-lg border border-amber-500/30 space-y-2 text-xs">

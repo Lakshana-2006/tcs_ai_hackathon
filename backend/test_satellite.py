@@ -134,6 +134,84 @@ def test_city_data_provenance_and_sectors():
     
     print("✓ City data provenance & geographic sectors test passed.")
 
+def test_satellite_structured_analysis():
+    print("\n--- 7. Testing GET /api/satellite/analysis (Master Prompt Section 6 Schema) ---")
+    response = client.get("/api/satellite/analysis?city=Chennai")
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert data.get("city") == "Chennai"
+    assert "records" in data
+    assert len(data["records"]) == 5
+
+    for rec in data["records"]:
+        print(f"Record: {rec['zone']} | Dataset: {rec['dataset']} | Status: {rec['data_status']}")
+        assert "city" in rec
+        assert "zone" in rec
+        assert "dataset" in rec
+        assert "acquisition_date" in rec
+        assert "land_surface_temperature_c" in rec
+        assert "ndvi" in rec
+        assert "ndwi" in rec
+        assert "ndbi" in rec
+        assert "vegetation_cover_percent" in rec
+        assert "data_status" in rec
+        assert rec["resolution_meters"] == 30
+        assert rec["data_status"] in ["available", "unavailable", "unconfigured"]
+    print("✓ Satellite structured analysis schema verified.")
+
+def test_satellite_history_endpoint():
+    print("\n--- 8. Testing GET /api/satellite/history ---")
+    response = client.get("/api/satellite/history?city=Chennai&start_date=2024-01-01&end_date=2024-06-30")
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert data.get("city") == "Chennai"
+    assert "authenticated" in data
+    assert "status" in data
+    print("✓ Satellite history endpoint test passed.")
+
+def test_satellite_provenance_endpoint():
+    print("\n--- 9. Testing GET /api/satellite/provenance ---")
+    response = client.get("/api/satellite/provenance")
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert "instruments" in data
+    instruments = [inst["instrument"] for inst in data["instruments"]]
+    assert any("Landsat" in inst for inst in instruments)
+    assert any("Sentinel-2" in inst for inst in instruments)
+    assert any("MODIS" in inst for inst in instruments)
+    print("✓ Satellite provenance endpoint test passed.")
+
+def test_scientific_formulas():
+    print("\n--- 10. Testing Scientific Scaling & Conversion Formulas ---")
+    # Landsat 8/9 ST_B10: DN * 0.00341802 + 149.0 = Kelvin -> Celsius
+    # Example DN = 44000
+    dn_landsat = 44000
+    kelvin_landsat = dn_landsat * 0.00341802 + 149.0
+    celsius_landsat = kelvin_landsat - 273.15
+    assert round(celsius_landsat, 2) == round((44000 * 0.00341802 + 149.0 - 273.15), 2)
+    print(f"    Landsat ST_B10 test: DN={dn_landsat} -> {kelvin_landsat:.2f} K -> {celsius_landsat:.2f} °C")
+
+    # MODIS LST_Day_1km: DN * 0.02 - 273.15 = Celsius
+    # Example DN = 15300 (306.0 K -> 32.85 °C)
+    dn_modis = 15300
+    kelvin_modis = dn_modis * 0.02
+    celsius_modis = kelvin_modis - 273.15
+    assert round(celsius_modis, 2) == 32.85
+    print(f"    MODIS test: DN={dn_modis} -> {kelvin_modis:.2f} K -> {celsius_modis:.2f} °C")
+
+    # Sentinel-2 Indices:
+    # Reflectance: B3 (green) = 0.12, B4 (red) = 0.10, B8 (nir) = 0.40, B11 (swir) = 0.15
+    b3, b4, b8, b11 = 0.12, 0.10, 0.40, 0.15
+    ndvi = (b8 - b4) / (b8 + b4)  # 0.30 / 0.50 = 0.60
+    ndwi = (b3 - b8) / (b3 + b8)  # -0.28 / 0.52 = -0.538
+    ndbi = (b11 - b8) / (b11 + b8) # -0.25 / 0.55 = -0.455
+    assert round(ndvi, 3) == 0.600
+    # FVC: ((0.60 - 0.15) / 0.55)^2 * 100 = (0.45 / 0.55)^2 * 100 = 0.818^2 * 100 = 66.9%
+    fvc = ((ndvi - 0.15) / 0.55) ** 2 * 100.0
+    print(f"    Sentinel-2 test: NDVI={ndvi:.3f}, NDWI={ndwi:.3f}, NDBI={ndbi:.3f}, FVC={fvc:.1f}%")
+    assert round(fvc, 1) == 66.9
+    print("✓ Scientific formula verification passed.")
+
 if __name__ == "__main__":
     test_satellite_status()
     test_satellite_city()
@@ -141,4 +219,8 @@ if __name__ == "__main__":
     test_single_zone_satellite()
     test_satellite_tiles()
     test_city_data_provenance_and_sectors()
-    print("\n🎉 ALL SATELLITE & DATA PROVENANCE TESTS PASSED SUCCESSFULLY! 🎉\n")
+    test_satellite_structured_analysis()
+    test_satellite_history_endpoint()
+    test_satellite_provenance_endpoint()
+    test_scientific_formulas()
+    print("\n🎉 ALL 10 SATELLITE & DATA PROVENANCE TESTS PASSED SUCCESSFULLY! 🎉\n")

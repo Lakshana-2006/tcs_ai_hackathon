@@ -1,11 +1,14 @@
 # Environment variables & secrets
 .env
+backend/.env
 .env.local
 .env.*.local
 *.env
 !*.env.example
 
 # Google Cloud & Earth Engine credentials
+service-account-key.json
+backend/service-account-key.json
 *.pem
 *.key
 *.p12

@@ -34,6 +34,8 @@ from app.satellite_service import (
     get_earth_engine_status,
     get_earth_engine_tile_urls,
     compute_satellite_zonal_statistics,
+    get_structured_satellite_records,
+    fetch_historical_satellite_series,
     ee_manager
 )
 from app.dataset_registry import (
@@ -593,6 +595,119 @@ def get_satellite_tiles(
     """
     tiles_data = get_earth_engine_tile_urls(lat, lon)
     return tiles_data
+
+
+@app.get("/api/satellite/analysis")
+def get_satellite_structured_analysis(
+    city: str = Query("Chennai", description="Target city name"),
+    zone_id: Optional[str] = Query(None, description="Optional specific zone ID"),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
+    days_back: int = Query(90, ge=7, le=365)
+):
+    """
+    Returns structured satellite observation records matching the exact schema specified in
+    Master Prompt Section 6:
+    [
+      {
+        "city": "Chennai",
+        "zone": "Central Urban Core",
+        "dataset": "LANDSAT/LC08/C02/T1_L2",
+        "acquisition_date": "...",
+        "land_surface_temperature_c": ...,
+        "ndvi": ...,
+        "ndwi": ...,
+        "ndbi": ...,
+        "vegetation_cover_percent": ...,
+        "data_status": "available" | "unavailable" | "unconfigured",
+        "resolution_meters": 30
+      }
+    ]
+    """
+    target_lat = lat or 13.0827
+    target_lon = lon or 80.2707
+    weather = fetch_city_weather(target_lat, target_lon)
+    zones = generate_city_zones(city, "Global", "GL", target_lat, target_lon, weather)
+
+    if zone_id:
+        zones = [z for z in zones if z["id"] == zone_id]
+        if not zones:
+            raise HTTPException(status_code=404, detail=f"Zone '{zone_id}' not found.")
+
+    records = get_structured_satellite_records(zones, city, days_back)
+    return {
+        "city": city,
+        "count": len(records),
+        "earth_engine_authenticated": ee_manager.is_initialized,
+        "records": records
+    }
+
+
+@app.get("/api/satellite/history")
+def get_satellite_history(
+    city: str = Query("Chennai", description="Target city name"),
+    start_date: str = Query("2024-01-01", description="Start date (YYYY-MM-DD)"),
+    end_date: str = Query("2024-06-30", description="End date (YYYY-MM-DD)"),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None)
+):
+    """
+    Retrieves historical satellite observations over a user-selected date range.
+    Reports honest unconfigured status when Earth Engine credentials are not present.
+    """
+    target_lat = lat or 13.0827
+    target_lon = lon or 80.2707
+    weather = fetch_city_weather(target_lat, target_lon)
+    zones = generate_city_zones(city, "Global", "GL", target_lat, target_lon, weather)
+
+    return fetch_historical_satellite_series(zones, city, start_date, end_date)
+
+
+@app.get("/api/satellite/provenance")
+def get_satellite_provenance():
+    """
+    Returns authoritative data provenance, scientific scaling factors,
+    and band specifications for all integrated satellite instruments.
+    """
+    return {
+        "system": "HEATSHIELD AI Earth Engine Pipeline",
+        "instruments": [
+            {
+                "instrument": "Landsat 8/9 OLI/TIRS Collection 2 Level-2",
+                "dataset_id": "LANDSAT/LC08/C02/T1_L2 + LC09/C02/T1_L2",
+                "provider": "USGS / NASA / Google Earth Engine",
+                "spatial_resolution": "30m (thermal resampled from 100m)",
+                "band_used": "ST_B10 (Surface Temperature)",
+                "scaling_formula": "Kelvin = ST_B10 * 0.00341802 + 149.0; Celsius = Kelvin - 273.15",
+                "cloud_masking": "QA_PIXEL bitmask: Bit 1 (Dilated Cloud), Bit 2 (Cirrus), Bit 3 (Cloud), Bit 4 (Cloud Shadow)",
+                "parameter": "Land Surface Temperature (°C)"
+            },
+            {
+                "instrument": "Sentinel-2 MSI Level-2A Surface Reflectance",
+                "dataset_id": "COPERNICUS/S2_SR_HARMONIZED",
+                "provider": "European Space Agency (ESA) Copernicus / Google Earth Engine",
+                "spatial_resolution": "10m (B2, B3, B4, B8), 20m (B11, SCL)",
+                "bands_used": "B2 (Blue), B3 (Green), B4 (Red), B8 (NIR), B11 (SWIR1), QA60, SCL",
+                "indices": {
+                    "NDVI": "(B8 - B4) / (B8 + B4)",
+                    "NDWI": "(B3 - B8) / (B3 + B8)",
+                    "NDBI": "(B11 - B8) / (B11 + B8)",
+                    "Fractional_Vegetation_Cover_Pct": "((NDVI - 0.15) / (0.70 - 0.15))^2 * 100% (Carlson & Ripley 1997 / Gutman & Ignatov 1998)"
+                },
+                "cloud_masking": "QA60 (Bits 10, 11) + SCL (Masking shadow=3, cloud_med=8, cloud_high=9, cirrus=10, snow=11)",
+                "parameter": "Multispectral vegetation, water, and built-up indices"
+            },
+            {
+                "instrument": "MODIS Terra Land Surface Temperature",
+                "dataset_id": "MODIS/061/MOD11A1 / MOD11A2",
+                "provider": "NASA LP DAAC / Google Earth Engine",
+                "spatial_resolution": "1000m (1 km)",
+                "band_used": "LST_Day_1km",
+                "scaling_formula": "Celsius = LST_Day_1km * 0.02 - 273.15",
+                "parameter": "Regional Land Surface Temperature Baseline (°C)"
+            }
+        ]
+    }
 
 
 # ==============================================================================

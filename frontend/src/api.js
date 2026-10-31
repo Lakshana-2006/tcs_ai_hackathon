@@ -174,6 +174,27 @@ export async function fetchSatelliteTiles(lat, lon, layer = 'lst') {
   return res.json();
 }
 
+export async function fetchSatelliteAnalysis(city = 'Chennai', zoneId = null, daysBack = 90) {
+  const params = new URLSearchParams({ city, days_back: daysBack });
+  if (zoneId) params.append('zone_id', zoneId);
+  const res = await fetch(`${BASE_URL}/api/satellite/analysis?${params.toString()}`);
+  if (!res.ok) throw new Error(`Satellite analysis fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchSatelliteHistory(city = 'Chennai', startDate = '2024-01-01', endDate = '2024-06-30') {
+  const params = new URLSearchParams({ city, start_date: startDate, end_date: endDate });
+  const res = await fetch(`${BASE_URL}/api/satellite/history?${params.toString()}`);
+  if (!res.ok) throw new Error(`Satellite history fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchSatelliteProvenance() {
+  const res = await fetch(`${BASE_URL}/api/satellite/provenance`);
+  if (!res.ok) throw new Error(`Satellite provenance fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
 export async function fetchDatasets(classification = null) {
   let url = `${BASE_URL}/api/datasets`;
   if (classification) {
