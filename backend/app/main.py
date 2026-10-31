@@ -36,6 +36,12 @@ from app.satellite_service import (
     compute_satellite_zonal_statistics,
     ee_manager
 )
+from app.dataset_registry import (
+    get_all_dataset_provenance,
+    get_dataset_provenance_by_id,
+    get_spatial_alignment_for_city,
+    DATASET_REGISTRY
+)
 
 app = FastAPI(
     title="HEATSHIELD AI — Global Urban Climate Resilience Digital Twin",
@@ -580,5 +586,46 @@ def get_satellite_tiles(
     """
     tiles_data = get_earth_engine_tile_urls(lat, lon)
     return tiles_data
+
+
+# ==============================================================================
+# DATASET INTEGRATION & PROVENANCE REGISTRY ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/datasets")
+def list_datasets(classification: Optional[str] = Query(None)):
+    """
+    Returns the complete catalog of integrated and supported datasets with
+    authoritative provenance metadata, licensing, spatial resolutions, and processing methods.
+    """
+    datasets = get_all_dataset_provenance()
+    if classification:
+        datasets = [d for d in datasets if d.get("classification") == classification]
+    return {
+        "status": "success",
+        "total_datasets": len(datasets),
+        "datasets": datasets
+    }
+
+
+@app.get("/api/datasets/spatial-alignment")
+def get_spatial_alignment(city: str = Query("Chennai", description="Target city name")):
+    """
+    Returns documented spatial alignment methodology, administrative boundary mapping,
+    and area-weighted intersection cross-references (e.g. GCC 200 Wards / 15 Zones for Chennai).
+    """
+    return get_spatial_alignment_for_city(city)
+
+
+@app.get("/api/datasets/{dataset_id}")
+def get_dataset_details(dataset_id: str):
+    """
+    Retrieves full provenance, DOI, provider, and band structure for a specific dataset.
+    """
+    dataset = get_dataset_provenance_by_id(dataset_id)
+    if not dataset:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found in registry.")
+    return dataset
+
 
 

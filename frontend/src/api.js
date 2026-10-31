@@ -173,3 +173,26 @@ export async function fetchSatelliteTiles(lat, lon, layer = 'lst') {
   if (!res.ok) throw new Error(`Satellite tiles fetch failed: ${res.statusText}`);
   return res.json();
 }
+
+export async function fetchDatasets(classification = null) {
+  let url = `${BASE_URL}/api/datasets`;
+  if (classification) {
+    url += `?classification=${encodeURIComponent(classification)}`;
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Datasets fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchDatasetDetails(datasetId) {
+  const res = await fetch(`${BASE_URL}/api/datasets/${datasetId}`);
+  if (!res.ok) throw new Error(`Dataset details fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchSpatialAlignment(cityName = 'Chennai') {
+  const res = await fetch(`${BASE_URL}/api/datasets/spatial-alignment?city=${encodeURIComponent(cityName)}`);
+  if (!res.ok) throw new Error(`Spatial alignment fetch failed: ${res.statusText}`);
+  return res.json();
+}
+

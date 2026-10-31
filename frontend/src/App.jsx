@@ -7,6 +7,7 @@ import ZoneDetails from './components/ZoneDetails';
 import InterventionSimulator from './components/InterventionSimulator';
 import BudgetOptimizer from './components/BudgetOptimizer';
 import ExplainabilityModal from './components/ExplainabilityModal';
+import DatasetSourcesModal from './components/DatasetSourcesModal';
 import ChatAssistant from './components/ChatAssistant';
 import { 
   fetchCityData, 
@@ -45,6 +46,7 @@ export default function App() {
   const [loadingSim, setLoadingSim] = useState(false);
   const [error, setError] = useState(null);
   const [explainModalOpen, setExplainModalOpen] = useState(false);
+  const [datasetModalOpen, setDatasetModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('twin'); // 'twin' or 'optimizer'
   const [satelliteStatus, setSatelliteStatus] = useState(null);
   const [satelliteLayers, setSatelliteLayers] = useState({});
@@ -224,6 +226,7 @@ export default function App() {
         onSelectCity={handleSelectCity}
         weather={weather}
         onOpenExplain={() => setExplainModalOpen(true)}
+        onOpenDatasets={() => setDatasetModalOpen(true)}
         onReset={handleResetInterventions}
         simulatedActive={hasActiveInterventions}
       />
@@ -374,6 +377,13 @@ export default function App() {
       <ExplainabilityModal
         isOpen={explainModalOpen}
         onClose={() => setExplainModalOpen(false)}
+      />
+
+      {/* Dataset Sources & Provenance Registry Modal */}
+      <DatasetSourcesModal
+        isOpen={datasetModalOpen}
+        onClose={() => setDatasetModalOpen(false)}
+        selectedCity={city}
       />
 
       {/* Floating AI Chat Assistant */}
