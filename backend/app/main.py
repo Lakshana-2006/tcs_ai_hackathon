@@ -42,6 +42,13 @@ from app.dataset_registry import (
     get_spatial_alignment_for_city,
     DATASET_REGISTRY
 )
+from app.temporal_service import (
+    fetch_historical_heat_risk,
+    fetch_forecast_heat_risk,
+    fetch_climate_projections,
+    get_temporal_risk_comparison,
+    calculate_zone_risk_for_conditions
+)
 
 app = FastAPI(
     title="HEATSHIELD AI — Global Urban Climate Resilience Digital Twin",
@@ -628,4 +635,188 @@ def get_dataset_details(dataset_id: str):
     return dataset
 
 
+# ==============================================================================
+# TEMPORAL HEAT-RISK ANALYSIS ENDPOINTS (PAST, PRESENT, FUTURE, CLIMATE 2050)
+# ==============================================================================
 
+@app.get("/api/temporal/past")
+def get_past_heat_risk(
+    city: str = Query("Chennai", description="Target city name"),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
+    start_date: str = Query("2024-05-15", description="Historical start date (YYYY-MM-DD)"),
+    end_date: str = Query("2024-05-22", description="Historical end date (YYYY-MM-DD)")
+):
+    """
+    Retrieves Open-Meteo ERA5 historical reanalysis weather and computes
+    historical daily heat-risk trajectories for all 5 city zones using the exact IPCC risk formula.
+    """
+    target_lat = lat
+    target_lon = lon
+    if target_lat is None or target_lon is None:
+        matches = geocode_city_search(city)
+        if matches:
+            target_lat = matches[0]["latitude"]
+            target_lon = matches[0]["longitude"]
+        else:
+            target_lat = 13.0827
+            target_lon = 80.2707
+
+    weather = fetch_city_weather(target_lat, target_lon)
+    zones = generate_city_zones(city, "Global", "GL", target_lat, target_lon, weather)
+
+    try:
+        data = fetch_historical_heat_risk(city, target_lat, target_lon, zones, start_date, end_date)
+        return data
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Historical weather retrieval failed: {str(e)}")
+
+
+@app.get("/api/temporal/present")
+def get_present_heat_risk(
+    city: str = Query("Chennai", description="Target city name"),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None)
+):
+    """
+    Returns current live weather-based heat risk for all 5 zones from Open-Meteo real-time telemetry.
+    """
+    target_lat = lat
+    target_lon = lon
+    if target_lat is None or target_lon is None:
+        matches = geocode_city_search(city)
+        if matches:
+            target_lat = matches[0]["latitude"]
+            target_lon = matches[0]["longitude"]
+        else:
+            target_lat = 13.0827
+            target_lon = 80.2707
+
+    weather = fetch_city_weather(target_lat, target_lon)
+    zones = generate_city_zones(city, "Global", "GL", target_lat, target_lon, weather)
+
+    cur_air = weather.get("air_temperature_c", 30.0)
+    cur_app = weather.get("apparent_temperature_c", cur_air + 4.0)
+
+    zone_risks = {}
+    for z in zones:
+        calc = calculate_zone_risk_for_conditions(z, cur_air, cur_app)
+        zone_risks[z["id"]] = {
+            "zone_name": z["name"],
+            "composite_risk": calc["composite_risk"],
+            "hazard_score": calc["hazard_score"],
+            "exposure_score": calc["exposure_score"],
+            "vulnerability_score": calc["vulnerability_score"],
+            "peak_surface_temp_c": calc["peak_surface_temp_c"]
+        }
+
+    avg_risk = round(sum(v["composite_risk"] for v in zone_risks.values()) / max(1, len(zone_risks)), 1)
+
+    return {
+        "status": "success",
+        "city": city,
+        "mode": "present",
+        "data_source": "Open-Meteo Real-Time Operational API (WMO Weather Stations)",
+        "timestamp": weather.get("timestamp", "Live Re-sync"),
+        "air_temperature_c": cur_air,
+        "apparent_temperature_c": cur_app,
+        "relative_humidity_pct": weather.get("relative_humidity_pct", 60.0),
+        "wind_speed_kmh": weather.get("wind_speed_kmh", 12.0),
+        "average_city_risk": avg_risk,
+        "zone_risks": zone_risks
+    }
+
+
+@app.get("/api/temporal/future")
+def get_future_heat_risk(
+    city: str = Query("Chennai", description="Target city name"),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
+    days: int = Query(7, ge=1, le=14, description="Forecast horizon in days (1-14)")
+):
+    """
+    Returns 7-14 day numerical weather prediction forecast and calculates
+    projected daily & hourly heat risk for all 5 zones.
+    """
+    target_lat = lat
+    target_lon = lon
+    if target_lat is None or target_lon is None:
+        matches = geocode_city_search(city)
+        if matches:
+            target_lat = matches[0]["latitude"]
+            target_lon = matches[0]["longitude"]
+        else:
+            target_lat = 13.0827
+            target_lon = 80.2707
+
+    weather = fetch_city_weather(target_lat, target_lon)
+    zones = generate_city_zones(city, "Global", "GL", target_lat, target_lon, weather)
+
+    try:
+        data = fetch_forecast_heat_risk(city, target_lat, target_lon, zones, forecast_days=days)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Forecast weather retrieval failed: {str(e)}")
+
+
+@app.get("/api/temporal/climate")
+def get_climate_heat_risk(
+    city: str = Query("Chennai", description="Target city name"),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
+    model: str = Query("EC_Earth3P_HR", description="CMIP6 Climate Model: EC_Earth3P_HR, MRI_AGCM3_2_S, MPI_ESM1_2_XR")
+):
+    """
+    Retrieves CMIP6 multi-model climate projection scenarios through 2050 from Open-Meteo Climate API.
+    """
+    target_lat = lat
+    target_lon = lon
+    if target_lat is None or target_lon is None:
+        matches = geocode_city_search(city)
+        if matches:
+            target_lat = matches[0]["latitude"]
+            target_lon = matches[0]["longitude"]
+        else:
+            target_lat = 13.0827
+            target_lon = 80.2707
+
+    weather = fetch_city_weather(target_lat, target_lon)
+    zones = generate_city_zones(city, "Global", "GL", target_lat, target_lon, weather)
+
+    try:
+        data = fetch_climate_projections(city, target_lat, target_lon, zones, model_name=model)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Climate projections retrieval failed: {str(e)}")
+
+
+@app.get("/api/temporal/compare")
+def get_temporal_comparison_route(
+    city: str = Query("Chennai", description="Target city name"),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None)
+):
+    """
+    Synthesizes a comparative temporal profile: Past Heatwave vs Present Live vs Future Forecast vs Climate 2050.
+    """
+    target_lat = lat
+    target_lon = lon
+    if target_lat is None or target_lon is None:
+        matches = geocode_city_search(city)
+        if matches:
+            target_lat = matches[0]["latitude"]
+            target_lon = matches[0]["longitude"]
+        else:
+            target_lat = 13.0827
+            target_lon = 80.2707
+
+    weather = fetch_city_weather(target_lat, target_lon)
+    zones = generate_city_zones(city, "Global", "GL", target_lat, target_lon, weather)
+
+    try:
+        data = get_temporal_risk_comparison(city, target_lat, target_lon, zones, weather)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Temporal comparison failed: {str(e)}")

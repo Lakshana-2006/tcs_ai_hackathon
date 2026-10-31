@@ -196,3 +196,60 @@ export async function fetchSpatialAlignment(cityName = 'Chennai') {
   return res.json();
 }
 
+export async function fetchTemporalPast(city, lat, lon, startDate, endDate) {
+  const params = new URLSearchParams({
+    city: city || 'Chennai',
+    start_date: startDate || '2024-05-15',
+    end_date: endDate || '2024-05-22'
+  });
+  if (lat !== null && lat !== undefined) params.append('lat', lat);
+  if (lon !== null && lon !== undefined) params.append('lon', lon);
+  const res = await fetch(`${BASE_URL}/api/temporal/past?${params.toString()}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Historical weather fetch failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function fetchTemporalPresent(city, lat, lon) {
+  const params = new URLSearchParams({ city: city || 'Chennai' });
+  if (lat !== null && lat !== undefined) params.append('lat', lat);
+  if (lon !== null && lon !== undefined) params.append('lon', lon);
+  const res = await fetch(`${BASE_URL}/api/temporal/present?${params.toString()}`);
+  if (!res.ok) throw new Error(`Current live temporal fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchTemporalFuture(city, lat, lon, days = 7) {
+  const params = new URLSearchParams({
+    city: city || 'Chennai',
+    days: days
+  });
+  if (lat !== null && lat !== undefined) params.append('lat', lat);
+  if (lon !== null && lon !== undefined) params.append('lon', lon);
+  const res = await fetch(`${BASE_URL}/api/temporal/future?${params.toString()}`);
+  if (!res.ok) throw new Error(`Forecast weather fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchTemporalClimate(city, lat, lon, model = 'EC_Earth3P_HR') {
+  const params = new URLSearchParams({
+    city: city || 'Chennai',
+    model
+  });
+  if (lat !== null && lat !== undefined) params.append('lat', lat);
+  if (lon !== null && lon !== undefined) params.append('lon', lon);
+  const res = await fetch(`${BASE_URL}/api/temporal/climate?${params.toString()}`);
+  if (!res.ok) throw new Error(`Climate projections fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchTemporalComparison(city, lat, lon) {
+  const params = new URLSearchParams({ city: city || 'Chennai' });
+  if (lat !== null && lat !== undefined) params.append('lat', lat);
+  if (lon !== null && lon !== undefined) params.append('lon', lon);
+  const res = await fetch(`${BASE_URL}/api/temporal/compare?${params.toString()}`);
+  if (!res.ok) throw new Error(`Temporal comparison fetch failed: ${res.statusText}`);
+  return res.json();
+}

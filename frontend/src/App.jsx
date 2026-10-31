@@ -8,6 +8,7 @@ import InterventionSimulator from './components/InterventionSimulator';
 import BudgetOptimizer from './components/BudgetOptimizer';
 import ExplainabilityModal from './components/ExplainabilityModal';
 import DatasetSourcesModal from './components/DatasetSourcesModal';
+import TemporalAnalysisPanel from './components/TemporalAnalysisPanel';
 import ChatAssistant from './components/ChatAssistant';
 import { 
   fetchCityData, 
@@ -322,6 +323,15 @@ export default function App() {
             {/* Tab 1: Interactive Twin & Simulator */}
             {activeTab === 'twin' && (
               <div className="space-y-4">
+                {/* Past / Present / Future / Climate 2050 Temporal Analysis Panel */}
+                <TemporalAnalysisPanel
+                  city={city}
+                  weather={weather}
+                  zones={zones}
+                  activeZoneId={selectedZoneId}
+                  onSelectZone={handleSelectZone}
+                />
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                   <div className="lg:col-span-7">
                     <HeatMap
