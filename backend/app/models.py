@@ -206,3 +206,44 @@ class SatelliteZonesResponse(BaseModel):
     error_message: Optional[str] = None
 
 
+class FeedbackCreate(BaseModel):
+    name: Optional[str] = Field(None, max_length=100)
+    role: str = Field(..., description="Role: Judge / Evaluator / Student / Faculty / Other")
+    overall_rating: int = Field(..., ge=1, le=5)
+    ease_of_use: int = Field(..., ge=1, le=5)
+    data_visualization: int = Field(..., ge=1, le=5)
+    heat_risk_analysis: int = Field(..., ge=1, le=5)
+    intervention_recommendations: int = Field(..., ge=1, le=5)
+    most_useful_feature: str = Field(..., min_length=2, max_length=500)
+    suggestions: str = Field(..., min_length=3, max_length=2000)
+    additional_comments: Optional[str] = Field(None, max_length=2000)
+
+
+class FeedbackRecord(BaseModel):
+    id: str
+    name: Optional[str] = None
+    role: str
+    overall_rating: int
+    ease_of_use: int
+    data_visualization: int
+    heat_risk_analysis: int
+    intervention_recommendations: int
+    most_useful_feature: str
+    suggestions: str
+    additional_comments: Optional[str] = None
+    created_at: str
+
+
+class FeedbackSummaryResponse(BaseModel):
+    total_submissions: int
+    avg_overall_rating: float
+    avg_ease_of_use: float
+    avg_data_visualization: float
+    avg_heat_risk_analysis: float
+    avg_intervention_recommendations: float
+    rating_distribution: Dict[str, int]
+    role_breakdown: Dict[str, int]
+    category_averages: List[Dict[str, Any]]
+
+
+

@@ -274,3 +274,30 @@ export async function fetchTemporalComparison(city, lat, lon) {
   if (!res.ok) throw new Error(`Temporal comparison fetch failed: ${res.statusText}`);
   return res.json();
 }
+
+export async function submitFeedback(feedbackData) {
+  const res = await fetch(`${BASE_URL}/api/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(feedbackData)
+  });
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    const detailMsg = errorJson.detail || `Feedback submission failed: ${res.statusText}`;
+    throw new Error(detailMsg);
+  }
+  return res.json();
+}
+
+export async function fetchFeedbackSummary() {
+  const res = await fetch(`${BASE_URL}/api/feedback/summary`);
+  if (!res.ok) throw new Error(`Feedback summary fetch failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchFeedbackList(limit = 20, offset = 0) {
+  const params = new URLSearchParams({ limit, offset });
+  const res = await fetch(`${BASE_URL}/api/feedback?${params.toString()}`);
+  if (!res.ok) throw new Error(`Feedback list fetch failed: ${res.statusText}`);
+  return res.json();
+}

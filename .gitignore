@@ -26,6 +26,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
+*.db
+*.sqlite3
+backend/data/*.db
 env/
 venv/
 .venv/

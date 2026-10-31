@@ -9,6 +9,7 @@ import BudgetOptimizer from './components/BudgetOptimizer';
 import ExplainabilityModal from './components/ExplainabilityModal';
 import DatasetSourcesModal from './components/DatasetSourcesModal';
 import TemporalAnalysisPanel from './components/TemporalAnalysisPanel';
+import FeedbackSession from './components/FeedbackSession';
 import ChatAssistant from './components/ChatAssistant';
 import { 
   fetchCityData, 
@@ -16,7 +17,7 @@ import {
   simulateInterventions 
 } from './api';
 import { simulateZoneLocally, DEFAULT_INTERVENTIONS_CATALOG } from './utils/simulationEngine';
-import { Map, Cpu, RefreshCw, AlertCircle, Globe } from 'lucide-react';
+import { Map, Cpu, RefreshCw, AlertCircle, Globe, MessageSquarePlus } from 'lucide-react';
 
 const DEFAULT_CITY = {
   name: 'Chennai',
@@ -228,6 +229,7 @@ export default function App() {
         weather={weather}
         onOpenExplain={() => setExplainModalOpen(true)}
         onOpenDatasets={() => setDatasetModalOpen(true)}
+        onOpenFeedback={() => setActiveTab('feedback')}
         onReset={handleResetInterventions}
         simulatedActive={hasActiveInterventions}
       />
@@ -300,6 +302,18 @@ export default function App() {
                 >
                   <Cpu className="w-3.5 h-3.5" />
                   <span>AI Budget Optimizer & Policy Rationale</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('feedback')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition ${
+                    activeTab === 'feedback'
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
+                >
+                  <MessageSquarePlus className="w-3.5 h-3.5" />
+                  <span>Feedback Session</span>
                 </button>
               </div>
 
@@ -378,6 +392,11 @@ export default function App() {
                 onApplyPlanToSimulator={handleApplyOptimizerPlan}
                 onSelectZone={handleSelectZone}
               />
+            )}
+
+            {/* Tab 3: Feedback Session (Judges, Evaluators & Users) */}
+            {activeTab === 'feedback' && (
+              <FeedbackSession activeCity={city} />
             )}
           </>
         )}

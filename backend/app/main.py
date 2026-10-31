@@ -19,6 +19,14 @@ from app.models import (
     ChatResponse,
     SatelliteStatusResponse,
     SatelliteZonesResponse,
+    FeedbackCreate,
+    FeedbackRecord,
+    FeedbackSummaryResponse,
+)
+from app.feedback_service import (
+    save_feedback,
+    get_all_feedback,
+    get_feedback_summary,
 )
 from app.simulation import simulate_zone_interventions, calculate_composite_risk
 from app.optimizer import optimize_budget_allocation
@@ -935,3 +943,43 @@ def get_temporal_comparison_route(
         return data
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Temporal comparison failed: {str(e)}")
+
+
+# ==============================================================================
+# FEEDBACK SESSION ENDPOINTS (JUDGES, EVALUATORS & USERS)
+# ==============================================================================
+
+@app.post("/api/feedback", response_model=FeedbackRecord, status_code=201)
+def submit_feedback(payload: FeedbackCreate):
+    """
+    Submits an evaluation or user feedback record into persistent SQLite storage.
+    Validates required fields, role, rating ranges (1-5), and text length.
+    """
+    try:
+        record = save_feedback(payload)
+        return record
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to persist feedback: {str(e)}")
+
+
+@app.get("/api/feedback", response_model=List[FeedbackRecord])
+def list_feedback(
+    limit: int = Query(50, ge=1, le=200, description="Max feedback records to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination")
+):
+    """
+    Retrieves stored feedback records in reverse chronological order for reviewer/evaluator inspection.
+    """
+    return get_all_feedback(limit=limit, offset=offset)
+
+
+@app.get("/api/feedback/summary", response_model=FeedbackSummaryResponse)
+def get_feedback_statistics():
+    """
+    Returns aggregated feedback analytics: total submissions, dimensional averages,
+    rating distributions, and role breakdowns.
+    """
+    return get_feedback_summary()
+

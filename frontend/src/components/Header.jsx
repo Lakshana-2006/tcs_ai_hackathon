@@ -12,7 +12,8 @@ import {
   Loader2,
   Globe2,
   ExternalLink,
-  Database
+  Database,
+  MessageSquarePlus
 } from 'lucide-react';
 import { searchCities } from '../api';
 
@@ -31,6 +32,7 @@ export default function Header({
   weather, 
   onOpenExplain, 
   onOpenDatasets,
+  onOpenFeedback,
   onReset, 
   simulatedActive 
 }) {
@@ -177,6 +179,15 @@ export default function Header({
               <Database className="w-3.5 h-3.5 text-cyan-400" />
               <span className="hidden sm:inline">Dataset Registry & Provenance</span>
               <span className="sm:hidden">Datasets</span>
+            </button>
+
+            <button
+              onClick={onOpenFeedback}
+              className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition font-medium"
+            >
+              <MessageSquarePlus className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Feedback Session</span>
+              <span className="sm:hidden">Feedback</span>
             </button>
 
             <button
